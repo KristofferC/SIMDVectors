@@ -29,7 +29,6 @@ end
     return vectupexpr(i -> :(VecElement(a[$i].value / n)), N)
 end
 
-
 @generated function Base.(:*){N}(a::SIMDElement{N}, n::Number)
     return vectupexpr(i -> :(VecElement(a[$i].value * n)), N)
 end

@@ -11,20 +11,21 @@ Base.size{M, N, R}(::SIMDVector{M, N, R}) = (R + M * N,)
 function Base.getindex{M, N}(v::SIMDVector{M, N}, i::Int)
     @boundscheck checkbounds(v, i)
     if i > M * N
-        return v.rest[i - M*N]
+        @inbounds val = v.rest[i - M*N]
+        return val
     else
         bucket = div(i-1, N) + 1
-        return v.simd_vecs[bucket][i - (bucket-1)*N]
+        @inbounds val = v.simd_vecs[bucket][i - (bucket-1)*N].value
+        return val
     end
 end
 
-@generated function load{N}(::Type{SIMDVector{N}}, data, offset::Int = 0)
-    T = eltype(data)
+function compute_lengths(N, T)
     if T == Float64 || T == Int64
         simd_len = 2
     elseif T == Float32 || T == Int32
         simd_len = 4
-    else # Default to store everything in the
+    else # Default to store all other types in the rest field which is a normal tuple
         simd_len = 0
     end
 
@@ -35,6 +36,15 @@ end
         rest = Int(N % simd_len)
         buckets = div(N - rest, simd_len)
     end
+
+    return simd_len, rest, buckets
+end
+
+
+
+@generated function load{N}(::Type{SIMDVector{N}}, data, offset::Int = 0)
+    T = eltype(data)
+    simd_len, rest, buckets = compute_lengths(N, T)
 
     simd_array_create_expr = Expr(:tuple)
     if simd_len != 0
