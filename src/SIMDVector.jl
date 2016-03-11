@@ -18,22 +18,30 @@ function Base.getindex{M, N}(v::SIMDVector{M, N}, i::Int)
     end
 end
 
-@generated function load{N, T <: Number}(::Type{SIMDVector{N}}, data::Vector{T}, offset::Int = 0)
-    if T == Float64
+@generated function load{N}(::Type{SIMDVector{N}}, data, offset::Int = 0)
+    T = eltype(data)
+    if T == Float64 || T == Int64
         simd_len = 2
-    elseif T == Float32
+    elseif T == Float32 || T == Int32
         simd_len = 4
-    else
-        return quote error("Unsupported type") end
+    else # Default to store everything in the
+        simd_len = 0
     end
 
-    rest = N % simd_len
-    buckets = div(N - rest, simd_len)
+    if simd_len == 0
+        rest = N
+        buckets = 0
+    else
+        rest = Int(N % simd_len)
+        buckets = div(N - rest, simd_len)
+    end
 
     simd_array_create_expr = Expr(:tuple)
-    for i in 1:simd_len:N-rest
-        push!(simd_array_create_expr.args,
-              Expr(:tuple, [:(VecElement(data[$j + offset])) for j in i:simd_len+i-1]...))
+    if simd_len != 0
+        for i in 1:simd_len:N-rest
+            push!(simd_array_create_expr.args,
+                  Expr(:tuple, [:(VecElement(data[$j + offset])) for j in i:simd_len+i-1]...))
+        end
     end
 
     rest_array_create_expr = Expr(:tuple, [:(data[$j + offset]) for j in (N-rest+1):N]...)
@@ -42,7 +50,7 @@ end
         @assert $N + offset <= length(data)
         @inbounds simd_tup =  $simd_array_create_expr
         @inbounds rest = $rest_array_create_expr
-        SIMDVector(simd_tup, rest)
+        SIMDVector{$buckets, $simd_len, $rest, $T}(simd_tup, rest)
     end
 end
 
