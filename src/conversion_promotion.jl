@@ -24,7 +24,7 @@ function generate_conversion_expr(simd_len, N, rest, T)
 end
 
 # Identity conversion
-Base.convert{M, N, R, T}(::Type{SIMDVector{M, N, R, T}}, vec::SIMDVector{M, N, R, T}) = vec
+@inline Base.convert{M, N, R, T}(::Type{SIMDVector{M, N, R, T}}, vec::SIMDVector{M, N, R, T}) = vec
 
 @generated function Base.convert{M1, N1, R1, T1, M2, N2, R2, T2}(::Type{SIMDVector{M1, N1, R1, T1}},
                                                                  v::SIMDVector{M2, N2, R2, T2})

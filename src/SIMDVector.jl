@@ -78,6 +78,12 @@ for (oper, tuple_oper) in ((:+, add_tuples),
                 SIMDVector{M, N, R, T}(simd_tup, $($(tuple_oper))(a.rest, b.rest))
             end
         end
+
+        # Just a::SIMDVector, b::SIMDVector didn't work...
+        function $(oper){M1, N1, R1, T1, M2, N2, R2, T2}(a::SIMDVector{M1, N1, R1, T1},
+                                                         b::SIMDVector{M2, N2, R2, T2})
+            $(oper)(promote(a,b)...)
+        end
     end
 end
 
