@@ -13,8 +13,9 @@ function generate_conversion_expr(simd_len, N, rest, T)
     simd_array_create_expr = Expr(:tuple)
     if simd_len != 0
         for i in 1:simd_len:N-rest
-            push!(simd_array_create_expr.args,
-                  Expr(:tuple, [:(VecElement(convert($T, v[$j]))) for j in i:simd_len+i-1]...))
+            exp_simd_ele = Expr(:call, :VecRegister)
+            push!(exp_simd_ele.args, Expr(:tuple, [:(VecElement(convert($T, v[$j]))) for j in i:simd_len+i-1]...))
+            push!(simd_array_create_expr.args, exp_simd_ele)
         end
     end
 
@@ -35,6 +36,20 @@ end
     return quote
         $(Expr(:meta, :inline))
         @assert M1 * N1 + R1 == M2 * N2 + R2
+        @inbounds simd_tup =  $simd_array_create_expr
+        @inbounds rest = $rest_array_create_expr
+        SIMDVector{$buckets, $simd_len, $rest, $Tr}(simd_tup, rest)
+    end
+end
+
+@generated function promote_eltype{M, N, R, T1, T2}(::Type{SIMDVector{M, N, R, T1}},
+                                                    n::T2)
+    Tr = promote_type(T1, T2)
+    simd_len, rest, buckets = compute_lengths(M1*N1 + R1, Tr)
+
+    simd_array_create_expr, rest_array_create_expr = generate_conversion_expr(simd_len, M1*N1 + R1, rest, Tr)
+    return quote
+        $(Expr(:meta, :inline))
         @inbounds simd_tup =  $simd_array_create_expr
         @inbounds rest = $rest_array_create_expr
         SIMDVector{$buckets, $simd_len, $rest, $Tr}(simd_tup, rest)

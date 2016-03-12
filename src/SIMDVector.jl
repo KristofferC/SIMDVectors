@@ -1,21 +1,20 @@
-import Base.Operators: +, *, .*, ./, -, /
-
 immutable SIMDVector{M, N, R, T <: Number} <: AbstractVector{T}
-    simd_vecs::NTuple{M, SIMDElement{N, T}}
+    simd_vecs::NTuple{M, VecRegister{N, T}}
     rest::NTuple{R, T}
 end
 
 Base.size{M, N, R}(::SIMDVector{M, N, R}) = (R + M * N,)
 
-# TODO: Make this efficient
+# TODO: Try make this more efficient
 function Base.getindex{M, N}(v::SIMDVector{M, N}, i::Int)
     @boundscheck checkbounds(v, i)
     if i > M * N
         @inbounds val = v.rest[i - M*N]
         return val
     else
+        # TODO, while loop instead of div
         bucket = div(i-1, N) + 1
-        @inbounds val = v.simd_vecs[bucket][i - (bucket-1)*N].value
+        @inbounds val = v.simd_vecs[bucket][i - (bucket-1)*N]
         return val
     end
 end
@@ -49,8 +48,9 @@ end
     simd_array_create_expr = Expr(:tuple)
     if simd_len != 0
         for i in 1:simd_len:N-rest
-            push!(simd_array_create_expr.args,
-                  Expr(:tuple, [:(VecElement(data[$j + offset])) for j in i:simd_len+i-1]...))
+            exp_simd_ele = Expr(:call, :VecRegister)
+            push!(exp_simd_ele.args, Expr(:tuple, [:(VecElement(data[$j + offset])) for j in i:simd_len+i-1]...))
+            push!(simd_array_create_expr.args, exp_simd_ele)
         end
     end
 
@@ -64,6 +64,26 @@ end
     end
 end
 
+function store!{M, N, R, T}(data, v::SIMDVector{M,N,R,T}, offset::Int = 0)
+    @assert length(data) + offset >= M*N + R
+    c = 1 + offset
+    #@inbounds
+    for i in 1:M
+        simd_element = v.simd_vecs[i]
+        @simd for j in 1:N
+            data[c] = simd_element[j]
+            c += 1
+        end
+    end
+
+    @simd for i in 1:R
+        @inbounds data[c] = v.rest[c]
+        c += 1
+    end
+    return data
+end
+
+
 # Binary operators between two SIMDVectors
 for (oper, tuple_oper) in ((:+, add_tuples),
                            (:-, subtract_tuples),
@@ -74,8 +94,7 @@ for (oper, tuple_oper) in ((:+, add_tuples),
             ex_simd = SIMDVectors.vectupexpr(i -> :(($($oper))(a.simd_vecs[$i], b.simd_vecs[$i])), M)
             return quote
                 $(Expr(:meta, :inline))
-                simd_tup = $ex_simd
-                SIMDVector{M, N, R, T}(simd_tup, $($(tuple_oper))(a.rest, b.rest))
+                SIMDVector{M, N, R, T}($ex_simd, $($(tuple_oper))(a.rest, b.rest))
             end
         end
 
@@ -95,23 +114,58 @@ for (oper, tuple_oper) in ((:*, scale_tuple),
             ex_simd = SIMDVectors.vectupexpr(i -> :(($($oper))(a.simd_vecs[$i], n)), M)
             return quote
                 $(Expr(:meta, :inline))
-                simd_tup = $ex_simd
-                SIMDVector{M, N, R, T}(simd_tup, $($(tuple_oper))(a.rest, n))
+                SIMDVector($ex_simd, $($(tuple_oper))(a.rest, n))
             end
         end
     end
 end
 
 
-Base.(:*){M, N, R, T}(b::Number, a::SIMDVector{M, N, R, T}) = a * b
+Base.(:*){M, N, R, T <: Number}(b::T, a::SIMDVector{M, N, R, T}) = a * b
 
 # Unary operators on SIMDVector
 @generated function (-){M, N, R, T}(a::SIMDVector{M, N, R, T})
     ex_simd = SIMDVectors.vectupexpr(i -> :(-a.simd_vecs[$i]), M)
     return quote
         $(Expr(:meta, :inline))
-        simd_tup = $ex_simd
-        SIMDVector{M, N, R, T}(simd_tup, minus_tuple(a.rest))
+        SIMDVector($ex_simd, minus_tuple(a.rest))
     end
 end
 
+@generated function Base.rand{M, N, R, T}(a::Type{SIMDVector{M, N, R, T}})
+    ex_simd = SIMDVectors.vectupexpr(i -> :(rand(VecRegister{N, T})), M)
+    return quote
+        $(Expr(:meta, :inline))
+        SIMDVector($ex_simd, rand_tuple(NTuple{R, T}))
+    end
+end
+
+@generated function Base.zero{M, N, R, T}(a::Type{SIMDVector{M, N, R, T}})
+    ex_simd = SIMDVectors.vectupexpr(i -> :z, M)
+    return quote
+        $(Expr(:meta, :inline))
+        z = zero(VecRegister{N, T})
+        SIMDVector($ex_simd, zero_tuple(NTuple{R, T}))
+    end
+end
+
+@generated function Base.one{M, N, R, T}(a::Type{SIMDVector{M, N, R, T}})
+    ex_simd = SIMDVectors.vectupexpr(i -> :z, M)
+    return quote
+        $(Expr(:meta, :inline))
+        z = one(VecRegister{N, T})
+        SIMDVector($ex_simd, one_tuple(NTuple{R, T}))
+    end
+end
+
+# Elementwise unary functions
+for f in (:sin, :cos, :exp)
+    @eval begin
+        @generated function Base.$(f){M, N, R, T}(a::SIMDVector{M, N, R, T})
+            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i])), M)
+            return quote
+                SIMDVector($ex_simd, map($($f), a.rest))
+            end
+        end
+    end
+end

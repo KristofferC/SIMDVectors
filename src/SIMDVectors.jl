@@ -1,9 +1,12 @@
 module SIMDVectors
 
-export SIMDVector, SIMDElement, load
+import Base.Operators: +, *, .*, ./, -, /, .^
+
+
+export SIMDVector, VecRegister, load
 
 include("tuple_ops.jl")
-include("SIMDElement.jl")
+include("VecRegister.jl")
 include("SIMDVector.jl")
 include("conversion_promotion.jl")
 
