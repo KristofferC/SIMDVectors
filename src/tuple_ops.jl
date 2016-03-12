@@ -55,3 +55,32 @@ end
         $(tupexpr(i -> :(a[$i]/b[$i]), N))
     end
 end
+
+@inline zero_tuple(::Type{Tuple{}}) = tuple()
+
+@generated function zero_tuple{N,T}(::Type{NTuple{N,T}})
+    result = tupexpr(i -> :z, N)
+    return quote
+        $(Expr(:meta, :inline))
+        z = zero($T)
+        return $result
+    end
+end
+
+@generated function one_tuple{N,T}(::Type{NTuple{N,T}})
+    result = tupexpr(i -> :z, N)
+    return quote
+        $(Expr(:meta, :inline))
+        z = one($T)
+        return $result
+    end
+end
+
+@inline rand_tuple(::Type{Tuple{}}) = tuple()
+
+@generated function rand_tuple{N,T}(::Type{NTuple{N,T}})
+    return tupexpr(i -> :(rand($T)), N)
+end
+
+
+

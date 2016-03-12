@@ -40,3 +40,17 @@ end
         SIMDVector{$buckets, $simd_len, $rest, $Tr}(simd_tup, rest)
     end
 end
+
+@generated function promote_eltype{M, N, R, T1, T2}(::Type{SIMDVector{M, N, R, T1}},
+                                                    n::T2)
+    Tr = promote_type(T1, T2)
+    simd_len, rest, buckets = compute_lengths(M1*N1 + R1, Tr)
+
+    simd_array_create_expr, rest_array_create_expr = generate_conversion_expr(simd_len, M1*N1 + R1, rest, Tr)
+    return quote
+        $(Expr(:meta, :inline))
+        @inbounds simd_tup =  $simd_array_create_expr
+        @inbounds rest = $rest_array_create_expr
+        SIMDVector{$buckets, $simd_len, $rest, $Tr}(simd_tup, rest)
+    end
+end
