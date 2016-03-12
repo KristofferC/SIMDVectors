@@ -1,7 +1,5 @@
-import Base.Operators: +, *, .*, ./, -, /
-
 immutable SIMDVector{M, N, R, T <: Number} <: AbstractVector{T}
-    simd_vecs::NTuple{M, SIMDElement{N, T}}
+    simd_vecs::NTuple{M, VecRegister{N, T}}
     rest::NTuple{R, T}
 end
 
@@ -14,10 +12,9 @@ function Base.getindex{M, N}(v::SIMDVector{M, N}, i::Int)
         @inbounds val = v.rest[i - M*N]
         return val
     else
-        bucket = 1
-        while i < bucket * N; bucket += 1 end
-#        bucket = div(i-1, N) + 1
-        @inbounds val = v.simd_vecs[bucket][i - (bucket-1)*N].value
+        # TODO, while loop instead of div
+        bucket = div(i-1, N) + 1
+        @inbounds val = v.simd_vecs[bucket][i - (bucket-1)*N]
         return val
     end
 end
@@ -51,8 +48,9 @@ end
     simd_array_create_expr = Expr(:tuple)
     if simd_len != 0
         for i in 1:simd_len:N-rest
-            push!(simd_array_create_expr.args,
-                  Expr(:tuple, [:(VecElement(data[$j + offset])) for j in i:simd_len+i-1]...))
+            exp_simd_ele = Expr(:call, :VecRegister)
+            push!(exp_simd_ele.args, Expr(:tuple, [:(VecElement(data[$j + offset])) for j in i:simd_len+i-1]...))
+            push!(simd_array_create_expr.args, exp_simd_ele)
         end
     end
 
@@ -135,7 +133,7 @@ Base.(:*){M, N, R, T <: Number}(b::T, a::SIMDVector{M, N, R, T}) = a * b
 end
 
 @generated function Base.rand{M, N, R, T}(a::Type{SIMDVector{M, N, R, T}})
-    ex_simd = SIMDVectors.vectupexpr(i -> :(rand(SIMDElement{N, T})), M)
+    ex_simd = SIMDVectors.vectupexpr(i -> :(rand(VecRegister{N, T})), M)
     return quote
         $(Expr(:meta, :inline))
         SIMDVector($ex_simd, rand_tuple(NTuple{R, T}))
@@ -146,7 +144,7 @@ end
     ex_simd = SIMDVectors.vectupexpr(i -> :z, M)
     return quote
         $(Expr(:meta, :inline))
-        z = zero(SIMDElement{N, T})
+        z = zero(VecRegister{N, T})
         SIMDVector($ex_simd, zero_tuple(NTuple{R, T}))
     end
 end
@@ -155,15 +153,19 @@ end
     ex_simd = SIMDVectors.vectupexpr(i -> :z, M)
     return quote
         $(Expr(:meta, :inline))
-        z = one(SIMDElement{N, T})
+        z = one(VecRegister{N, T})
         SIMDVector($ex_simd, one_tuple(NTuple{R, T}))
+    end
 end
 
 # Elementwise unary functions
 for f in (:sin, :cos, :exp)
     @eval begin
-        function Base.$(f{N}(a::SIMDVector{M, N, R, T})
-            return SIMDVector($f(a.simd_vecs), map(f, a.rest))
+        @generated function Base.$(f){M, N, R, T}(a::SIMDVector{M, N, R, T})
+            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i])), M)
+            return quote
+                SIMDVector($ex_simd, map($($f), a.rest))
+            end
         end
     end
 end

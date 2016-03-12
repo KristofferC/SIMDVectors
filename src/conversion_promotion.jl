@@ -13,8 +13,9 @@ function generate_conversion_expr(simd_len, N, rest, T)
     simd_array_create_expr = Expr(:tuple)
     if simd_len != 0
         for i in 1:simd_len:N-rest
-            push!(simd_array_create_expr.args,
-                  Expr(:tuple, [:(VecElement(convert($T, v[$j]))) for j in i:simd_len+i-1]...))
+            exp_simd_ele = Expr(:call, :VecRegister)
+            push!(exp_simd_ele.args, Expr(:tuple, [:(VecElement(convert($T, v[$j]))) for j in i:simd_len+i-1]...))
+            push!(simd_array_create_expr.args, exp_simd_ele)
         end
     end
 

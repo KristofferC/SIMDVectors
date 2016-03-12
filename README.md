@@ -17,10 +17,9 @@ julia> v = load(SIMDVector{7}, rand(12))
  0.586471
 ```
 
-This looks like a normal `Vector` but internally the data is packed such that vectorized instructions are used when operators are performed on and between `SIMDVector`'s. If the length of the vector are such that not all numbers fit in vector registers, scalar operations are performed on the rest. `SIMDVector`'s' should gracefully handle arbitrary julia number types.
+This looks like a normal `Vector` but internally the data is packed such that vectorized instructions are used when operators are performed on and between `SIMDVector`'s. If the length of the vector are such that not all numbers fit in vector registers, scalar operations are performed on the rest.
 
 ```jl
-
 julia> va = load(SIMDVector{9}, rand(Float32, 12));
 
 julia> vb = load(SIMDVector{9}, rand(Float32, 12));
@@ -34,6 +33,8 @@ julia> @code_native va + vb
     vaddss  32(%rdx), %xmm2, %xmm2 # One scalar add for the rest
 ...
 ```
+
+## Promotions
 
 Operators between two different types will convert like normal vectors:
 
@@ -55,10 +56,23 @@ julia> va + vb
  1.02997
 ```
 
-# Under the hood
+## User defined number types
 
-We use a @generated function to dispatch on the type of the input data and store it 
+`SIMDVector`'s' should gracefully handle arbitrary julia number types. This makes it so that a `SIMDVector` can be used even if you are unsure what data it will hold.
 
-# TODO
+```jl
+julia> a = load(SIMDVector{4}, big(rand(12))); # Load Big floats into a SIMDVector
 
-- Check for 
+julia> a+a # Works fine
+4-element SIMDVectors.SIMDVector{0,0,4,BigFloat}:
+ 2.531343636343290626200541737489402294158935546875000000000000000000000000000000e-01
+ 3.366090705330369026171410951064899563789367675781250000000000000000000000000000e-01
+ 1.697265196033196144043131425860337913036346435546875000000000000000000000000000
+ 1.206431829930139532081057041068561375141143798828125000000000000000000000000000
+```
+
+
+
+## TODO
+
+- A lot
