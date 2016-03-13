@@ -36,22 +36,35 @@ end
     return quote
         $(Expr(:meta, :inline))
         @assert M1 * N1 + R1 == M2 * N2 + R2
-        @inbounds simd_tup =  $simd_array_create_expr
+        @inbounds simd_tup = $simd_array_create_expr
         @inbounds rest = $rest_array_create_expr
         SIMDVector{$buckets, $simd_len, $rest, $Tr}(simd_tup, rest)
     end
 end
 
-@generated function promote_eltype{M, N, R, T1, T2}(::Type{SIMDVector{M, N, R, T1}},
-                                                    n::T2)
-    Tr = promote_type(T1, T2)
-    simd_len, rest, buckets = compute_lengths(M1*N1 + R1, Tr)
+promote_eltype{M, N, R, T <: Number}(v::SIMDVector{M, N, R, T}, n::T) = v, n
+promote_eltype{M, N, R, T <: Number}(n::T, v::SIMDVector{M, N, R, T}) = n, v
 
-    simd_array_create_expr, rest_array_create_expr = generate_conversion_expr(simd_len, M1*N1 + R1, rest, Tr)
+@generated function promote_eltype{M, N, R, T1 <: Number, T2 <: Number}(v::SIMDVector{M, N, R, T1},
+                                                                        n::T2)
+    Tr = promote_type(T1, T2)
+    if Tr == T1
+        return quote
+            return v, convert(T1, n)
+        end
+    end
+
+    simd_len, rest, buckets = compute_lengths(M*N + R, Tr)
+    simd_array_create_expr, rest_array_create_expr = generate_conversion_expr(simd_len, M*N + R, rest, Tr)
     return quote
         $(Expr(:meta, :inline))
-        @inbounds simd_tup =  $simd_array_create_expr
+        @inbounds simd_tup = $simd_array_create_expr
         @inbounds rest = $rest_array_create_expr
-        SIMDVector{$buckets, $simd_len, $rest, $Tr}(simd_tup, rest)
+        return SIMDVector{$buckets, $simd_len, $rest, $Tr}(simd_tup, rest), convert($Tr, n)
     end
+end
+
+function promote_eltype{M, N, R, T1 <: Number, T2 <: Number}(n::T1, v::SIMDVector{M, N, R, T2})
+    vr, nr = promote_eltype(v, n)
+    return nr, vr
 end

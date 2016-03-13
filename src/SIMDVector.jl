@@ -117,18 +117,26 @@ for f in BINARY_FUNCS
             end
         end
 
-        @generated function Base.$(f){M, N, R, T <: Number}(a::SIMDVector{M, N, R, T}, b::Number)
+        @generated function Base.$(f){M, N, R, T <: Number}(a::SIMDVector{M, N, R, T}, b::T)
             ex_simd = vectupexpr(i -> :(($($f))(a.simd_vecs[$i], b)), M)
             return quote
                 SIMDVector{M, N, R}($ex_simd, $($(tuple_f_string))(a.rest, b))
             end
         end
 
-        @generated function Base.$(f){M, N, R, T <: Number}(b::Number, a::SIMDVector{M, N, R, T})
+        @generated function Base.$(f){M, N, R, T <: Number}(b::T, a::SIMDVector{M, N, R, T})
             ex_simd = vectupexpr(i -> :(($($f))(b, a.simd_vecs[$i])), M)
             return quote
                 SIMDVector{M, N, R}($ex_simd, $($(tuple_f_string))(b, a.rest))
             end
+        end
+
+        function Base.$(f){M, N, R, T1 <: Number, T2 <: Number}(b::T1, a::SIMDVector{M, N, R, T2})
+            $(f)(promote_eltype(b, a)...)
+        end
+
+        function Base.$(f){M, N, R, T1 <: Number, T2 <: Number}(a::SIMDVector{M, N, R, T1}, b::T2)
+            $(f)(promote_eltype(a, b)...)
         end
 
         function $(f){M1, N1, R1, T1, M2, N2, R2, T2}(a::SIMDVector{M1, N1, R1, T1},
