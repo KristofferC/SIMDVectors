@@ -2,7 +2,11 @@
 
 [![Build Status](https://travis-ci.org/KristofferC/SIMDVectors.jl.svg?branch=master)](https://travis-ci.org/KristofferC/SIMDVectors.jl)
 
-This is currently an experimental package that uses the PR [#15244](https://github.com/JuliaLang/julia/pull/15244) to create a stack allocated fixed size vector which supports SIMD operations. For this package to work, the branch above needs to be used and julia needs to be started with the `-O3` flag.
+This is an experimental package that uses the PR [#15244](https://github.com/JuliaLang/julia/pull/15244) to create a stack allocated fixed size vector which supports SIMD operations. It is very similar in spirit to the [SIMD.jl](https://github.com/eschnett/SIMD.jl) package excpet this is written in pure julia. It also supports type promotions and should cleanly degenerate to a normal tuple for "exotic" number types like `BigFloat`.
+
+For this package to work, the branch above needs to be used and to actually get SIMD operations, julia needs to be started with the `-O3` flag.
+
+## Loading and storing `SIMDVector`s
 
 A `SIMDVector` can be created by for example using `load(SIMDVector{N}, v, offset=0)` where `N` is the length of the vector, `v` is vector to load data from and `offset` is an offset into `v` where to start loading data:
 
@@ -17,7 +21,25 @@ julia> v = load(SIMDVector{7}, rand(12))
  0.586471
 ```
 
-This looks like a normal `Vector` but internally the data is packed such that vectorized instructions are used when operators are performed on and between `SIMDVector`'s. If the length of the vector are such that not all numbers fit in vector registers, scalar operations are performed on the rest.
+A `SIMDVector` can be stored back in a normal `Vector` with the `store!` function:
+
+```jl
+julia> vec_store = similar(v)
+
+julia> store!(vec_store, v)
+7-element Array{Float64, 1}:
+ 0.0333167
+ 0.52255
+ 0.171032
+ 0.667967
+ 0.832219
+ 0.586471
+ ```
+
+## Operations on and between `SIMDVector`s.
+
+A `SIMDVector` looks like a normal `Vector` but internally the data is packed such that, when possible, vectorized instructions are used when operators are performed on and between `SIMDVector`'s.
+If the length of the vector are such that not all numbers fit in vector registers, scalar operations are performed on the rest.
 
 ```jl
 julia> va = load(SIMDVector{9}, rand(Float32, 12));
@@ -27,11 +49,21 @@ julia> vb = load(SIMDVector{9}, rand(Float32, 12));
 
 julia> @code_native va + vb
 ...
-    vaddps  (%rdx), %xmm0, %xmm0   # One packed add for the first set of four VecElements
-    vaddps  16(%rdx), %xmm1, %xmm1 # Second packed adds for second set of four VecElements
+    vaddps  (%rdx), %xmm0, %xmm0   # One packed add for the first set of four Float32s
+    vaddps  16(%rdx), %xmm1, %xmm1 # Second packed add for second set of four Float32s
     vmovss  32(%rsi), %xmm2
     vaddss  32(%rdx), %xmm2, %xmm2 # One scalar add for the rest
 ...
+```
+
+Reduction (`sum`, `prod`, `maximum`, `minimum`) are also available:
+
+```jl
+julia> sum(va)
+4.901259f0
+
+julia> maximum(va)
+0.93982494f0
 ```
 
 ## Promotions
@@ -70,9 +102,3 @@ julia> a+a # Works fine
  1.697265196033196144043131425860337913036346435546875000000000000000000000000000
  1.206431829930139532081057041068561375141143798828125000000000000000000000000000
 ```
-
-
-
-## TODO
-
-- A lot

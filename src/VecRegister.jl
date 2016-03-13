@@ -58,6 +58,33 @@ for f in BINARY_FUNCS
     end
 end
 
+function recursive_reduction_expr!(expr, i, N, f)
+    if i == 2
+        return expr
+    else
+        return Expr(:call, f, recursive_reduction_expr!(expr, i-1, N, f), :(a[$(i)]))
+    end
+end
+
+for (f, f_scal) in REDUCTION_FUNCS
+    @eval begin
+        @generated function $(f){N}(a::VecRegister{N})
+            if N == 0
+                return quote end
+            elseif N == 1
+                return quote a[1] end
+            else
+                expr = Expr(:call, $f_scal, :(a[1]), :(a[2]))
+                full_red_expr = recursive_reduction_expr!(expr, N, N, $f_scal)
+                return quote
+                    $(Expr(:meta, :inline))
+                    $full_red_expr
+                end
+            end
+        end
+    end
+end
+
 @generated function Base.zero{N,T}(::Type{VecRegister{N,T}})
     result = vectupexpr(i -> :(VecElement(z)), N)
     return quote
