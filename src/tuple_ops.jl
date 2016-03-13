@@ -7,55 +7,6 @@ function tupexpr(f,N)
     end
 end
 
-@generated function scale_tuple{N}(tup::NTuple{N}, x)
-    return  quote
-        $(Expr(:meta, :inline))
-        $(tupexpr(i -> :(tup[$i] * x), N))
-    end
-end
-
-@generated function div_tuple_by_scalar{N}(tup::NTuple{N}, x)
-    return quote
-        $(Expr(:meta, :inline))
-        $tupexpr(i -> :(tup[$i]/x), N)
-    end
-end
-
-@generated function minus_tuple{N}(tup::NTuple{N})
-    return quote
-        $(Expr(:meta, :inline))
-        $(tupexpr(i -> :(-tup[$i]), N))
-    end
-end
-
-@generated function subtract_tuples{N}(a::NTuple{N}, b::NTuple{N})
-    return quote
-        $(Expr(:meta, :inline))
-        $(tupexpr(i -> :(a[$i]-b[$i]), N))
-    end
-end
-
-@generated function add_tuples{N}(a::NTuple{N}, b::NTuple{N})
-    return quote
-        $(Expr(:meta, :inline))
-        $(tupexpr(i -> :(a[$i]+b[$i]), N))
-    end
-end
-
-@generated function mul_tuples{N}(a::NTuple{N}, b::NTuple{N})
-    return quote
-        $(Expr(:meta, :inline))
-        $(tupexpr(i -> :(a[$i]*b[$i]), N))
-    end
-end
-
-@generated function div_tuples{N}(a::NTuple{N}, b::NTuple{N})
-    return quote
-        $(Expr(:meta, :inline))
-        $(tupexpr(i -> :(a[$i]/b[$i]), N))
-    end
-end
-
 @inline zero_tuple(::Type{Tuple{}}) = tuple()
 
 @generated function zero_tuple{N,T}(::Type{NTuple{N,T}})
@@ -82,5 +33,40 @@ end
     return tupexpr(i -> :(rand($T)), N)
 end
 
+for f in UNARY_FUNCS
+    tuple_f_string = symbol(string(f) * "_tuple")
+    @eval begin
+        @generated function $(tuple_f_string){N}(a::NTuple{N})
+            return quote
+                $(Expr(:meta, :inline))
+                $(tupexpr(i -> :($($f)(a[$i])), N))
+            end
+        end
+    end
+end
 
+for f in BINARY_FUNCS
+    tuple_f_string = symbol(string(f) * "_tuple")
+    @eval begin
+        @generated function $(tuple_f_string){N}(a::NTuple{N}, b::NTuple{N})
+            return quote
+            $(Expr(:meta, :inline))
+            $(tupexpr(i -> :($($f)(a[$i], b[$i])), N))
+            end
+        end
 
+        @generated function $(tuple_f_string){N}(a::NTuple{N}, b::Number)
+            return quote
+                $(Expr(:meta, :inline))
+                $(tupexpr(i -> :($($f)(a[$i], b)), N))
+            end
+        end
+
+        @generated function $(tuple_f_string){N}(b::Number, a::NTuple{N})
+            return quote
+                $(Expr(:meta, :inline))
+                $(tupexpr(i -> :($($f)(b, a[$i])), N))
+            end
+        end
+    end
+end
