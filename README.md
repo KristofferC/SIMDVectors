@@ -6,6 +6,8 @@ This is an experimental package that uses the PR [#15244](https://github.com/Jul
 
 For this package to work, the branch above needs to be used and to actually get SIMD operations, julia needs to be started with the `-O3` flag.
 
+There are currently a few ambiguity warnings when the package is loaded, This is annoying but should not cause any real problems.
+
 ## Loading and storing `SIMDVector`s
 
 A `SIMDVector` can be created by for example using `load(SIMDVector{N}, v, offset=0)` where `N` is the length of the vector, `v` is vector to load data from and `offset` is an offset into `v` where to start loading data:
