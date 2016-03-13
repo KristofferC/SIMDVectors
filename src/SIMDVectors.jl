@@ -2,9 +2,15 @@ module SIMDVectors
 
 importall Base
 
+export SIMDVector, load, store!
 
+const VEC_REGISTER_SIZE_BITS = 128
 
-export SIMDVector, VecRegister, load
+const VECTOR_DATATYPES = Set{DataType}(
+	 (Bool,
+	 Int8,Int16, Int32, Int64, Int128,
+	 UInt8, UInt16, UInt32, UInt64, UInt128,
+	 Float16, Float32, Float64))
 
 # List taken from FixedSizeArrays.jl
 const UNARY_FUNCS = (:-, :~, :conj, :abs,

@@ -20,10 +20,8 @@ function Base.getindex{M, N}(v::SIMDVector{M, N}, i::Int)
 end
 
 function compute_lengths(N, T)
-    if T == Float64 || T == Int64
-        simd_len = 2
-    elseif T == Float32 || T == Int32
-        simd_len = 4
+    if T in VECTOR_DATATYPES
+        simd_len = div(VEC_REGISTER_SIZE_BITS , sizeof(T) * 8)
     else # Default to store all other types in the rest field which is a normal tuple
         simd_len = 0
     end
