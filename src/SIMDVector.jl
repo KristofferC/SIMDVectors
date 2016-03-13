@@ -5,9 +5,20 @@ end
 
 Base.size{M, N, R}(::SIMDVector{M, N, R}) = (R + M * N,)
 
+@inline function Base.call{M, N, R, T}(::Type{SIMDVector{M, N, R}}, a::Tuple{}, b::NTuple{R, T})
+    SIMDVector{M, N, R, T}(a, b)
+end
+
+@inline function Base.call{M, N, R, T}(::Type{SIMDVector{M, N, R}}, a::NTuple{M, VecRegister{N, T}}, b::NTuple{R, T})
+    SIMDVector{M, N, R, T}(a, b)
+end
+
+@inline function Base.call{M, N, R, T}(::Type{SIMDVector{M, N, R}}, a::NTuple{M, VecRegister{N, T}}, b::Tuple{})
+    SIMDVector{M, N, R, T}(a, b)
+end
+
 # TODO: Try make this more efficient
-function Base.getindex{M, N}(v::SIMDVector{M, N}, i::Int)
-    @boundscheck checkbounds(v, i)
+function Base.getindex{M, N, R}(v::SIMDVector{M, N, R}, i::Int)
     if i > M * N
         @inbounds val = v.rest[i - M*N]
         return val
@@ -62,7 +73,7 @@ end
     end
 end
 
-function store!{M, N, R, T}(data, v::SIMDVector{M,N,R,T}, offset::Int = 0)
+function store!{M, N, R}(data, v::SIMDVector{M,N,R}, offset::Int = 0)
     @assert length(data) + offset >= M*N + R
     c = 1 + offset
     #@inbounds
@@ -75,7 +86,7 @@ function store!{M, N, R, T}(data, v::SIMDVector{M,N,R,T}, offset::Int = 0)
     end
 
     @simd for i in 1:R
-        @inbounds data[c] = v.rest[c]
+        @inbounds data[c] = v.rest[i]
         c += 1
     end
     return data
@@ -87,9 +98,9 @@ for f in UNARY_FUNCS
     tuple_f_string = symbol(string(f) * "_tuple")
     @eval begin
         @generated function Base.$(f){M, N, R, T}(a::SIMDVector{M, N, R, T})
-            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i])), M)
+            ex_simd = vectupexpr(i -> :(($($f))(a.simd_vecs[$i])), M)
             return quote
-                SIMDVector($ex_simd, $($(tuple_f_string))(a.rest))
+                SIMDVector{M, N, R}($ex_simd, $($(tuple_f_string))(a.rest))
             end
         end
     end
@@ -100,29 +111,49 @@ for f in BINARY_FUNCS
     tuple_f_string = symbol(string(f) * "_tuple")
     @eval begin
         @generated function Base.$(f){M, N, R, T <: Number}(a::SIMDVector{M, N, R, T}, b::SIMDVector{M, N, R, T})
-            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i], b.simd_vecs[$i])), M)
+            ex_simd = vectupexpr(i -> :(($($f))(a.simd_vecs[$i], b.simd_vecs[$i])), M)
             return quote
-                SIMDVector($ex_simd, $($(tuple_f_string))(a.rest, b.rest))
+                SIMDVector{M, N, R}($ex_simd, $($(tuple_f_string))(a.rest, b.rest))
             end
         end
 
         @generated function Base.$(f){M, N, R, T <: Number}(a::SIMDVector{M, N, R, T}, b::Number)
-            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i], b)), M)
+            ex_simd = vectupexpr(i -> :(($($f))(a.simd_vecs[$i], b)), M)
             return quote
-                SIMDVector($ex_simd, $($(tuple_f_string))(a.rest, b))
+                SIMDVector{M, N, R}($ex_simd, $($(tuple_f_string))(a.rest, b))
             end
         end
 
         @generated function Base.$(f){M, N, R, T <: Number}(b::Number, a::SIMDVector{M, N, R, T})
-            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(b, a.simd_vecs[$i])), M)
+            ex_simd = vectupexpr(i -> :(($($f))(b, a.simd_vecs[$i])), M)
             return quote
-                SIMDVector($ex_simd, $($(tuple_f_string))(b, a.rest))
+                SIMDVector{M, N, R}($ex_simd, $($(tuple_f_string))(b, a.rest))
             end
         end
 
         function $(f){M1, N1, R1, T1, M2, N2, R2, T2}(a::SIMDVector{M1, N1, R1, T1},
                                                       b::SIMDVector{M2, N2, R2, T2})
             $(f)(promote(a,b)...)
+        end
+    end
+end
+
+# Reductions
+for (f_vec, f_scal) in REDUCTION_FUNCS
+    @eval begin
+        function $f_vec{M, N, R, T}(v::SIMDVector{M, N, R, T})
+            if M == 0
+                return $f_vec(v.rest)
+            end
+            @inbounds v1 = v.simd_vecs[1]
+            @inbounds for i in 2:M
+                v1 = $f_scal(v1, v.simd_vecs[i])
+            end
+            if R == 0
+                return $f_vec(v1)
+            else
+                return $f_scal($f_vec(v1), $f_vec(v.rest))
+            end
         end
     end
 end
