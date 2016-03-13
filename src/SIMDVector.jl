@@ -84,53 +84,51 @@ function store!{M, N, R, T}(data, v::SIMDVector{M,N,R,T}, offset::Int = 0)
 end
 
 
-# Binary operators between two SIMDVectors
-for (oper, tuple_oper) in ((:+, add_tuples),
-                           (:-, subtract_tuples),
-                           (:.*, mul_tuples),
-                           (:./, div_tuples))
+# Elementwise unary functions
+for f in UNARY_FUNCS
+    tuple_f_string = symbol(string(f) * "_tuple")
     @eval begin
-        @generated function $(oper){M, N, R, T}(a::SIMDVector{M, N, R, T}, b::SIMDVector{M, N, R, T})
-            ex_simd = SIMDVectors.vectupexpr(i -> :(($($oper))(a.simd_vecs[$i], b.simd_vecs[$i])), M)
+        @generated function Base.$(f){M, N, R, T}(a::SIMDVector{M, N, R, T})
+            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i])), M)
             return quote
-                $(Expr(:meta, :inline))
-                SIMDVector{M, N, R, T}($ex_simd, $($(tuple_oper))(a.rest, b.rest))
-            end
-        end
-
-        # Just a::SIMDVector, b::SIMDVector didn't work...
-        function $(oper){M1, N1, R1, T1, M2, N2, R2, T2}(a::SIMDVector{M1, N1, R1, T1},
-                                                         b::SIMDVector{M2, N2, R2, T2})
-            $(oper)(promote(a,b)...)
-        end
-    end
-end
-
-# Binary operator SIMDVector and number
-for (oper, tuple_oper) in ((:*, scale_tuple),
-                           (:/, div_tuple_by_scalar))
-    @eval begin
-        @generated function $(oper){M, N, R, T}(a::SIMDVector{M, N, R, T}, n::Number)
-            ex_simd = SIMDVectors.vectupexpr(i -> :(($($oper))(a.simd_vecs[$i], n)), M)
-            return quote
-                $(Expr(:meta, :inline))
-                SIMDVector($ex_simd, $($(tuple_oper))(a.rest, n))
+                SIMDVector($ex_simd, $($(tuple_f_string))(a.rest))
             end
         end
     end
 end
 
+# Binary functions between two vectors and vector, number.
+for f in BINARY_FUNCS
+    tuple_f_string = symbol(string(f) * "_tuple")
+    @eval begin
+        @generated function Base.$(f){M, N, R, T <: Number}(a::SIMDVector{M, N, R, T}, b::SIMDVector{M, N, R, T})
+            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i], b.simd_vecs[$i])), M)
+            return quote
+                SIMDVector($ex_simd, $($(tuple_f_string))(a.rest, b.rest))
+            end
+        end
 
-Base.(:*){M, N, R, T <: Number}(b::T, a::SIMDVector{M, N, R, T}) = a * b
+        @generated function Base.$(f){M, N, R, T <: Number}(a::SIMDVector{M, N, R, T}, b::Number)
+            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i], b)), M)
+            return quote
+                SIMDVector($ex_simd, $($(tuple_f_string))(a.rest, b))
+            end
+        end
 
-# Unary operators on SIMDVector
-@generated function (-){M, N, R, T}(a::SIMDVector{M, N, R, T})
-    ex_simd = SIMDVectors.vectupexpr(i -> :(-a.simd_vecs[$i]), M)
-    return quote
-        $(Expr(:meta, :inline))
-        SIMDVector($ex_simd, minus_tuple(a.rest))
+        @generated function Base.$(f){M, N, R, T <: Number}(b::Number, a::SIMDVector{M, N, R, T})
+            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(b, a.simd_vecs[$i])), M)
+            return quote
+                SIMDVector($ex_simd, $($(tuple_f_string))(b, a.rest))
+            end
+        end
+
+        function $(f){M1, N1, R1, T1, M2, N2, R2, T2}(a::SIMDVector{M1, N1, R1, T1},
+                                                      b::SIMDVector{M2, N2, R2, T2})
+            $(f)(promote(a,b)...)
+        end
     end
 end
+
 
 @generated function Base.rand{M, N, R, T}(a::Type{SIMDVector{M, N, R, T}})
     ex_simd = SIMDVectors.vectupexpr(i -> :(rand(VecRegister{N, T})), M)
@@ -155,17 +153,5 @@ end
         $(Expr(:meta, :inline))
         z = one(VecRegister{N, T})
         SIMDVector($ex_simd, one_tuple(NTuple{R, T}))
-    end
-end
-
-# Elementwise unary functions
-for f in (:sin, :cos, :exp)
-    @eval begin
-        @generated function Base.$(f){M, N, R, T}(a::SIMDVector{M, N, R, T})
-            ex_simd = SIMDVectors.vectupexpr(i -> :(($($f))(a.simd_vecs[$i])), M)
-            return quote
-                SIMDVector($ex_simd, map($($f), a.rest))
-            end
-        end
     end
 end
