@@ -4,7 +4,7 @@
 
 [![Build Status](https://travis-ci.org/KristofferC/SIMDVectors.jl.svg?branch=master)](https://travis-ci.org/KristofferC/SIMDVectors.jl)
 
-This is an experimental package that uses the PR [#15244](https://github.com/JuliaLang/julia/pull/15244) to create a stack allocated fixed size vector which supports SIMD operations. It is very similar in spirit to the [SIMD.jl](https://github.com/eschnett/SIMD.jl) package excpet this is written in pure julia. It also supports type promotions and should cleanly work with "exotic" number types like `BigFloat`.
+This is an experimental package that uses the PR [#15244](https://github.com/JuliaLang/julia/pull/15244) to create a stack allocated fixed size vector which supports SIMD operations. It is very similar in spirit to the [SIMD.jl](https://github.com/eschnett/SIMD.jl) package except this is written in pure Julia. It also supports type promotions and should cleanly work with "exotic" number types like `BigFloat`.
 
 For this package to work, the branch above needs to be used and to actually get SIMD operations, julia needs to be started with the `-O3` flag.
 
